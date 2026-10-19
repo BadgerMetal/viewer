@@ -1,0 +1,86 @@
+{
+  "id": "./",
+  "name": "Badger File Viewer",
+  "short_name": "File Viewer",
+  "description": "View DXF, MetaCAM .pdg / .3d and STEP / IGES / BREP files: part and sheet sizes, dimensions, bends.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#100900",
+  "theme_color": "#100900",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "launch_handler": {
+    "client_mode": "focus-existing"
+  },
+  "file_handlers": [
+    {
+      "action": "./",
+      "name": "DXF drawing",
+      "accept": {
+        "image/vnd.dxf": [
+          ".dxf"
+        ]
+      }
+    },
+    {
+      "action": "./",
+      "name": "MetaCAM drawing",
+      "accept": {
+        "application/x-metacam-pdg": [
+          ".pdg"
+        ]
+      }
+    },
+    {
+      "action": "./",
+      "name": "MetaCAM 3D part",
+      "accept": {
+        "application/x-metacam-3d": [
+          ".3d"
+        ]
+      }
+    },
+    {
+      "action": "./",
+      "name": "STEP model",
+      "accept": {
+        "model/step": [
+          ".step",
+          ".stp"
+        ]
+      }
+    },
+    {
+      "action": "./",
+      "name": "IGES model",
+      "accept": {
+        "model/iges": [
+          ".igs",
+          ".iges"
+        ]
+      }
+    },
+    {
+      "action": "./",
+      "name": "BREP model",
+      "accept": {
+        "application/x-brep": [
+          ".brep"
+        ]
+      }
+    }
+  ]
+}
