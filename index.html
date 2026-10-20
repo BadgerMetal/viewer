@@ -311,9 +311,9 @@ const DXF = (() => {
   const MARK_RE = /(^|[^a-z])(etch|mark|scribe|engrav|text|label)/i; // "ETCH", "Etch-1" but not "Sketch"
   const SHEET_RE = /sheet|plate|stock|material|blank|border|skeleton|remnant/i;
   const SKIP_LAYER_RE = /^defpoints$/i;
-  // bend direction from the layer: MetaCAM's Bend = down, MBend = up; other CAD only when the name says so
-  const bendDirOf = (l) => /^m[ _-]?bend$/i.test(l) || /(^|[^a-z])up([^a-z]|$)/i.test(l) ? 'up'
-    : /^bend$/i.test(l) || /(^|[^a-z])(down|dn)([^a-z]|$)/i.test(l) ? 'down' : null;
+  // bend direction from the layer: MetaCAM's Bend = up, MBend = down; other CAD only when the name says so
+  const bendDirOf = (l) => /^bend$/i.test(l) ? 'up' : /^m[ _-]?bend$/i.test(l) ? 'down'
+    : /(^|[^a-z])up([^a-z]|$)/i.test(l) ? 'up' : /(^|[^a-z])(down|dn)([^a-z]|$)/i.test(l) ? 'down' : null;
 
   // MTEXT / TEXT string -> plain lines (formatting codes dropped, \P and real newlines split); null if blank
   function textLines(s, mtext) {
@@ -1117,7 +1117,7 @@ if (typeof module !== 'undefined') module.exports = DXF;
   let dimK = 1;
   try { dimK = Math.min(3, Math.max(0.5, +localStorage.getItem('fv.dimsize') || 1)); } catch (e) {}
   // which copy a shop PC is running: hover the logo (bump on every deploy)
-  const BUILD = '2026-10-19d';
+  const BUILD = '2026-10-20a';
   $('logo').title = 'Badger File Viewer · build ' + BUILD;
   // the file's own dimensions (the engineer's), shown or not
   let fileDims = true;
