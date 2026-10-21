@@ -876,6 +876,41 @@ const DXF = (() => {
         }
       }
     }
+    // X-crossings: common-line grids are often drawn as long lines running clean across each other, with
+    // no end at the crossing, often overshooting the sheet border. Split where a plain line crosses another
+    // plain line or a closed outline square, partway along both (lead-ins and rapids drawn inside parts cross
+    // at any angle, and splitting those carves parts into fake pieces).
+    const SQ = 0.02; // |cos| of the crossing angle: within ~1 degree of square
+    for (const p of open) {
+      const a = p.pts;
+      if (a.length !== 4) continue;
+      for (let i = 0; i + 3 < a.length; i += 2) {
+        const ax = a[i], ay = a[i + 1], dx = a[i + 2] - ax, dy = a[i + 3] - ay, la = Math.hypot(dx, dy);
+        if (la < tol * 2) continue;
+        const x0 = Math.floor((Math.min(ax, a[i + 2]) - tol) / cell), x1 = Math.floor((Math.max(ax, a[i + 2]) + tol) / cell);
+        const y0 = Math.floor((Math.min(ay, a[i + 3]) - tol) / cell), y1 = Math.floor((Math.max(ay, a[i + 3]) + tol) / cell);
+        if ((x1 - x0 + 1) * (y1 - y0 + 1) > 4096) continue;
+        const tried = new Set();
+        for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) {
+          const list = grid.get(x + ',' + y); if (!list) continue;
+          for (let j = 0; j < list.length; j += 2) {
+            const q = cand[list[j]], k = list[j + 1];
+            if (q === p || (!q.closed && q.pts.length !== 4)) continue;
+            const key = list[j] * 1e7 + k; if (tried.has(key)) continue; tried.add(key);
+            const b = q.pts, bx = b[k], by = b[k + 1], ex = b[k + 2] - bx, ey = b[k + 3] - by, lb = Math.hypot(ex, ey);
+            if (lb < tol * 2) continue;
+            const den = dx * ey - dy * ex;
+            if (Math.abs(dx * ex + dy * ey) > la * lb * SQ) continue; // not square (or parallel)
+            const t = ((bx - ax) * ey - (by - ay) * ex) / den, u = ((bx - ax) * dy - (by - ay) * dx) / den;
+            if (t * la <= tol || (1 - t) * la <= tol || u * lb <= tol || (1 - u) * lb <= tol) continue; // an end: tees above
+            const sx = ax + t * dx, sy = ay + t * dy;
+            (splits.get(p) || splits.set(p, []).get(p)).push({ i, t, x: sx, y: sy });
+            // a closed outline (sheet border) crossed by a divider that overshoots it: never visited as p, so split it here
+            if (q.closed) (splits.get(q) || splits.set(q, []).get(q)).push({ i: k, t: u, x: sx, y: sy });
+          }
+        }
+      }
+    }
     if (!splits.size) return cut;
     const out = [];
     for (const p of cut) {
@@ -920,7 +955,7 @@ const DXF = (() => {
       }
       return 0;
     };
-    const hes = [], dup = new Map();
+    let hes = []; const dup = new Map();
     for (const p of ps) {
       const a = p.pts, L = a.length, u = nodeAt(a[0], a[1]), v = nodeAt(a[L - 2], a[L - 1]);
       if (u === v) continue;
@@ -934,6 +969,17 @@ const DXF = (() => {
       h1.twin = h2; h2.twin = h1; hes.push(h1, h2);
       nodes[u].out.push(h1); nodes[v].out.push(h2);
     }
+    // dead ends (a divider's overshoot past the border, a stray lead-in) bound nothing: trim them so they
+    // don't spike the outlines they hang off
+    const gone = new Set(), stack = nodes.filter(n => n.out.length === 1);
+    while (stack.length) {
+      const n = stack.pop(); if (n.out.length !== 1) continue;
+      const h = n.out[0], m = nodes[h.to];
+      gone.add(h); gone.add(h.twin); n.out = [];
+      m.out = m.out.filter(o => o !== h.twin);
+      if (m.out.length === 1) stack.push(m);
+    }
+    if (gone.size) hes = hes.filter(h => !gone.has(h));
     for (const n of nodes) { n.out.sort((a, b) => a.ang - b.ang); n.out.forEach((h, i) => { h.ix = i; }); }
     const out = [], seen = new Set();
     for (const h0 of hes) {
@@ -1117,7 +1163,7 @@ if (typeof module !== 'undefined') module.exports = DXF;
   let dimK = 1;
   try { dimK = Math.min(3, Math.max(0.5, +localStorage.getItem('fv.dimsize') || 1)); } catch (e) {}
   // which copy a shop PC is running: hover the logo (bump on every deploy)
-  const BUILD = '2026-10-20a';
+  const BUILD = '2026-10-21a';
   $('logo').title = 'Badger File Viewer · build ' + BUILD;
   // the file's own dimensions (the engineer's), shown or not
   let fileDims = true;
