@@ -165,6 +165,42 @@
   .qitem .kind.k2d { background: var(--orange-2); }
   .qitem .kind.k3d { background: #c6c3be; }
 
+  /* station version (?pi): no print; Open = the PARTS folder browser */
+  html.pi #printBtn { display: none !important; }
+  #browse { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; z-index: 25; }
+  #browse[hidden] { display: none; }
+  #browse .bx { background: var(--panel-2); border-left: 5px solid var(--orange); width: min(860px, calc(100vw - 16px)); height: min(820px, calc(100dvh - 16px));
+    display: flex; flex-direction: column; box-shadow: 0 10px 40px rgba(0,0,0,.7); }
+  #browse.out .bhead, #browse.out .btools { display: none; }
+  .bhead { display: flex; align-items: center; gap: 8px; padding: 10px 10px 6px 14px; }
+  .bhead > button { flex: none; width: 48px; height: 48px; padding: 0; font-size: 26px; line-height: 48px; clip-path: none; }
+  .bhead > button:disabled { opacity: .35; cursor: default; }
+  #bCrumbs { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; scrollbar-width: none; color: var(--dim); font-size: 18px; }
+  #bCrumbs .crumb { background: none; clip-path: none; padding: 6px 4px; font-size: 18px; color: var(--text); text-transform: none; letter-spacing: 0; }
+  #bCrumbs .crumb:last-child { color: var(--orange-2); font-weight: 700; }
+  .btools { display: flex; gap: 8px; padding: 0 10px 10px 14px; }
+  #bFilter { flex: 1; min-width: 0; font: 18px "Roboto Condensed", sans-serif; padding: 10px 12px; background: #0b0806; color: #fff; border: 1px solid var(--line); }
+  #bFilter:focus { outline: none; border-color: var(--orange); }
+  /* quick access: top customers by sales, one tap to their folder */
+  #bQuick { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 10px 10px 14px; }
+  #bQuick[hidden], #browse.out #bQuick { display: none; }
+  #bQuick button { min-height: 44px; padding: 8px 22px; font-size: 16px; }
+  #bQuick button.on { background: var(--orange); }
+  #bList { flex: 1; overflow-y: auto; border-top: 1px solid var(--line); }
+  .brow { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 54px; padding: 8px 14px; background: none; clip-path: none; text-align: left;
+    border-bottom: 1px solid var(--line); color: var(--text); font-size: 18px; text-transform: none; letter-spacing: 0; font-weight: 400; }
+  .brow:hover:not([disabled]) { background: var(--brown); }
+  .brow .bn { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .brow .bs { flex: none; color: var(--dim); font-size: 14px; }
+  .brow .ic { flex: none; width: 24px; height: 18px; background: var(--orange-2); clip-path: polygon(0 0, 40% 0, 50% 18%, 100% 18%, 100% 100%, 0 100%); }
+  .brow .kind { flex: none; min-width: 40px; text-align: center; font-size: 12px; font-weight: 800; color: #100900; background: var(--dim); padding: 1px 4px; letter-spacing: .04em; }
+  .brow .kind.k2d { background: var(--orange-2); } .brow .kind.k3d { background: #c6c3be; }
+  .brow.no { color: var(--dim); cursor: default; } .brow.no .kind { background: var(--line); color: var(--dim); }
+  .brow.open .bn::after { content: "open"; margin-left: 10px; font-size: 12px; font-weight: 700; color: var(--orange-2); text-transform: uppercase; letter-spacing: .06em; }
+  #bList .muted { padding: 18px 14px; }
+  .bmsg { padding: 40px 24px; font-size: 18px; color: var(--dim); text-align: center; }
+  .bmsg b { display: block; font-size: 28px; color: var(--text); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 8px; }
+
   /* Print: the form, and the page (only #printout goes to paper) */
   #printDlg { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; z-index: 30; }
   #printDlg[hidden] { display: none; }
@@ -284,6 +320,12 @@
   <div id="scrim"></div>
 </div>
 <div id="drop">Drop DXF to view</div>
+<div id="browse" hidden><div class="bx">
+  <div class="bhead"><button type="button" id="bUp" title="Up a folder (Backspace)" aria-label="Up">↑</button><div id="bCrumbs"></div><button type="button" id="bClose" aria-label="Close">×</button></div>
+  <div class="btools"><input id="bFilter" type="search" placeholder="Filter this folder" autocomplete="off" spellcheck="false"><button type="button" id="bAll" class="primary">Open all</button></div>
+  <div id="bQuick" hidden aria-label="Top customers"></div>
+  <div id="bList"></div>
+</div></div>
 <div id="printDlg" hidden><form id="printForm" autocomplete="off">
   <h3>Print</h3>
   <label for="tbPart">Part number</label><input id="tbPart">
@@ -1075,9 +1117,10 @@ const DXF = (() => {
   }
   // backgauge spots for one bend: edges of the part's outer profile parallel to the bend, facing away from it, that a
   // finger coming straight in from behind can touch (nothing else of the part further out over the same stretch).
-  // Edges at the same distance on one side count as one gauge (fingers on separate tabs). -> { cands: [{ side, d, t0, t1 }], axis }
+  // Edges at the same distance on one side count as one gauge (fingers on separate tabs).
+  // -> { cands: [{ side, d, t0, t1, iv: [[t0, t1], ...] the stretches really touched }], axis }
   // t runs along the bend from its longest segment's start, side * n points from the bend toward the edge.
-  function gaugeCands(outline, bendPts, tol) {
+  function gaugeCands(outline, bendPts, tol, minLen = 0) {
     let L = 0, bi = 0;
     for (let i = 0; i + 3 < bendPts.length; i += 2) { const l = Math.hypot(bendPts[i + 2] - bendPts[i], bendPts[i + 3] - bendPts[i + 1]); if (l > L) { L = l; bi = i; } }
     if (!(L > 0)) return null;
@@ -1090,7 +1133,7 @@ const DXF = (() => {
       const j = (i + 1) % m, x0 = outline[2 * i] - ox, y0 = outline[2 * i + 1] - oy, x1 = outline[2 * j] - ox, y1 = outline[2 * j + 1] - oy;
       segs.push({ t0: x0 * u[0] + y0 * u[1], n0: x0 * n[0] + y0 * n[1], t1: x1 * u[0] + y1 * u[1], n1: x1 * n[0] + y1 * n[1] });
     }
-    const cands = [];
+    const cands = [], raw = [];
     for (const side of [1, -1]) {
       const hits = [];
       for (const s of segs) {
@@ -1109,13 +1152,21 @@ const DXF = (() => {
           iv = iv.flatMap(([l, h]) => sh <= l || sl >= h ? [[l, h]] : [l < sl ? [l, sl] : null, h > sh ? [sh, h] : null].filter(Boolean));
           if (!iv.length) break;
         }
-        for (const [l, h] of iv) if (h - l > tol * 4) hits.push({ d, l, h });
+        for (const [l, h] of iv) if (h - l > tol * 4) hits.push({ side, d, l, h });
       }
-      hits.sort((a, b) => a.d - b.d);
-      for (const h of hits) {
-        const g = cands.find(c => c.side === side && Math.abs(c.d - h.d) <= tol * 2);
-        if (g) { g.t0 = Math.min(g.t0, h.l); g.t1 = Math.max(g.t1, h.h); } else cands.push({ side, d: h.d, t0: h.l, t1: h.h });
-      }
+      raw.push(...hits);
+    }
+    // only where the edge faces the bend line itself: past the bend's ends the outline is a side flange or a corner notch
+    // (abe 2026-11-17: a box's side-flange tops, just short of the opposite bend, won the gauge with fingers 31" apart).
+    // A bend with no edge in front of it at all keeps the old reach (dimension drawn off the bend's extended line).
+    // Stretches too short for a finger (minLen; the 0.355" corner steps on that box's flange) are dropped while the
+    // bend has anything longer.
+    const inReach = raw.map(h => ({ ...h, l: Math.max(h.l, b0), h: Math.min(h.h, b1) })).filter(h => h.h - h.l > tol * 4);
+    const long = inReach.filter(h => h.h - h.l >= minLen);
+    for (const h of (long.length ? long : inReach.length ? inReach : raw).sort((a, b) => a.d - b.d)) {
+      const g = cands.find(c => c.side === h.side && Math.abs(c.d - h.d) <= tol * 2);
+      if (g) { g.t0 = Math.min(g.t0, h.l); g.t1 = Math.max(g.t1, h.h); g.iv.push([h.l, h.h]); }
+      else cands.push({ side: h.side, d: h.d, t0: h.l, t1: h.h, iv: [[h.l, h.h]] });
     }
     return { cands, axis: { ox, oy, u, n, b0, b1 } };
   }
@@ -1124,7 +1175,7 @@ const DXF = (() => {
   // (closer is a relief or a lip, not a gauge). Picked the drafters' own bend dimension on 86% of 8,850 .pdg bends
   // with a choice (scratch study, 2026-10-19); plain nearest edge: 71%. Nothing qualifies: the widest spread.
   function bendGauge(outline, bendPts, tol, toInch) {
-    const g = gaugeCands(outline, bendPts, tol);
+    const g = gaugeCands(outline, bendPts, tol, 0.5 / toInch);
     if (!g || !g.cands.length) return null;
     const a = g.axis, minD = 0.25 / toInch, half = (a.b1 - a.b0) / 2 - tol * 4;
     const ok = g.cands.filter(c => c.d >= minD && c.t1 - c.t0 >= half);
@@ -1163,7 +1214,7 @@ if (typeof module !== 'undefined') module.exports = DXF;
   let dimK = 1;
   try { dimK = Math.min(3, Math.max(0.5, +localStorage.getItem('fv.dimsize') || 1)); } catch (e) {}
   // which copy a shop PC is running: hover the logo (bump on every deploy)
-  const BUILD = '2026-10-21a';
+  const BUILD = '2026-11-17a';
   $('logo').title = 'Badger File Viewer · build ' + BUILD;
   // the file's own dimensions (the engineer's), shown or not
   let fileDims = true;
@@ -1198,6 +1249,9 @@ if (typeof module !== 'undefined') module.exports = DXF;
 
   // the public web copy (tools/publish-web.cjs sets this): no lib/dwg.js there - LibreDWG is GPL, internal use only
   const WEB = true;
+  // the station version (/viewer/?pi on Badger Shop): files come from the server's PARTS folder, per person; no print
+  const PI = new URLSearchParams(location.search).has('pi');
+  document.documentElement.classList.toggle('pi', PI);
   // heavy readers live in lib/ beside this page and load on first use (plain <script> tags work from file://)
   const scripts = new Map();
   function need(...names) {
@@ -1331,8 +1385,16 @@ if (typeof module !== 'undefined') module.exports = DXF;
       fresh.push(e);
     }
     select(first);
+    await loadAll(fresh);
+  }
+  // read each new entry in turn (e.fileP: the file is still coming, from the server's PARTS folder)
+  async function loadAll(fresh) {
     for (const e of fresh) {
-      try { await loadEntry(e); } catch (err) { e.err = err.message || String(err); console.error(e.name, err); }
+      try {
+        if (e.fileP) { if (files[cur] === e) busy('Getting ' + e.name + '…'); e.file = await e.fileP; e.size = e.file.size; e.fileP = null; }
+        if (files[cur] === e) busy('Reading ' + e.name + '…');
+        await loadEntry(e);
+      } catch (err) { e.err = err.message || String(err); console.error(e.name, err); }
       e.loading = false; busy(null);
       if (files[cur] === e) select(cur); else renderQueue();
     }
@@ -1467,13 +1529,15 @@ if (typeof module !== 'undefined') module.exports = DXF;
   }
   function renderQueue() {
     const q = $('queue');
-    if (!files.length) { q.innerHTML = '<div class="muted">Drag files anywhere in this window.</div>'; return; }
+    if (PI) saveState();
+    if (!files.length) { q.innerHTML = PI ? '<div class="muted">Tap Open to find files in PARTS.</div>' : '<div class="muted">Drag files anywhere in this window.</div>'; return; }
     q.innerHTML = '';
     files.forEach((f, i) => {
       const d = document.createElement('div');
       d.className = 'qitem' + (i === cur ? ' active' : '');
       d.innerHTML = `<div style="flex:1;min-width:0"><div class="n"></div><div class="s"><span class="kind k${f.dim}d"></span><span class="sz"></span></div></div><span class="x" title="Remove">✕</span>`;
       d.querySelector('.n').textContent = f.name;
+      if (f.src) d.title = f.src.split('/').slice(0, -1).join(' › ');
       d.querySelector('.kind').textContent = f.tag;
       d.querySelector('.sz').textContent = sizeLabel(f);
       d.onclick = (ev) => {
@@ -1785,10 +1849,13 @@ if (typeof module !== 'undefined') module.exports = DXF;
   function drawGauge(p, m, r, col, placed, dpr) {
     const g = p.gauge, W = (t, k) => toScreen(g.ox + g.u[0] * t + g.n[0] * g.side * k, g.oy + g.u[1] * t + g.n[1] * g.side * k);
     const k = dimK, txt = fmt(g.d, m), tw = ctx.measureText(txt).width + 10 * k, BH = 20 * k;
-    // where along the bend: inside both the bend and the edge's reach, off the bend label in the middle
-    const lo = Math.max(g.b0, g.t0), hi = Math.min(g.b1, g.t1);
-    const spots = lo <= hi ? [0.2, 0.8, 0.5, 0.05, 0.95].map(k => lo + (hi - lo) * k)
-      : [g.t1 < g.b0 ? g.t1 : g.t0]; // edge clear of the bend's ends: dimension at the edge's near end, bend line extended to it
+    // where along the bend: on a stretch where the edge really is (never the gap between two tabs), inside the bend's
+    // reach, longest stretch first, off the bend label in the middle
+    const spots = (g.iv || [[g.t0, g.t1]]).slice().sort((a, b) => (b[1] - b[0]) - (a[1] - a[0])).flatMap(([t0, t1]) => {
+      const lo = Math.max(g.b0, t0), hi = Math.min(g.b1, t1);
+      return lo <= hi ? [0.2, 0.8, 0.5, 0.05, 0.95].map(k => lo + (hi - lo) * k)
+        : [t1 < g.b0 ? t1 : t0]; // edge clear of the bend's ends: dimension at the edge's near end, bend line extended to it
+    });
     const color = col(p.bendDir === 'up' ? '--bend-up' : p.bendDir === 'down' ? '--bend' : '--bend-other');
     for (const t of spots) {
       const [x0, y0] = W(t, 0), [x1, y1] = W(t, g.d), len = Math.hypot(x1 - x0, y1 - y0);
@@ -2073,7 +2140,7 @@ if (typeof module !== 'undefined') module.exports = DXF;
   }
   const lsGet = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : v; } catch (e) { return d; } };
   async function openPrint() {
-    const f = files[cur]; if (!f || !['2d', '3d', 'img'].includes(mode)) return;
+    const f = files[cur]; if (PI || !f || !['2d', '3d', 'img'].includes(mode)) return;
     const tb = f.tb || titleGuess(f);
     $('tbPart').value = tb.part; $('tbRev').value = tb.rev; $('tbCust').value = tb.cust;
     $('tbOmit').checked = false;   // off every time: the title block is the normal print
@@ -2147,6 +2214,7 @@ if (typeof module !== 'undefined') module.exports = DXF;
   // first Open of a session starts in this computer's PARTS folder, later ones in the folder of the last file opened or dropped
   // (no picker id: Chrome's remembered folder for an id would win over the PARTS folder)
   $('openBtn').onclick = async () => {
+    if (PI) return browse(bDir);
     if (!window.showOpenFilePicker) return $('fileInput').click();
     let hs;
     try { hs = await showOpenFilePicker({ multiple: true, startIn: lastH || (await partsRoot()) || 'documents' }); }
@@ -2154,6 +2222,146 @@ if (typeof module !== 'undefined') module.exports = DXF;
     addFiles(await Promise.all(hs.map(h => h.getFile())), hs.map(h => Promise.resolve(h)));
   };
   $('fileInput').onchange = (e) => { addFiles(e.target.files); e.target.value = ''; };
+
+  // ---------- station version: the PARTS folder on the server ----------
+  // Badger Shop (/api/files) lists and sends PARTS files to whoever is signed in at the station (PIN), and keeps each
+  // person's folder, open files and current file, so they come back where they left off at any station.
+  let bDir = '', bRoot = 'PARTS', bData = null, stateReady = false, saveT = 0;
+  const enc = encodeURIComponent;
+  async function api(url, opts) {
+    const r = await fetch(url, Object.assign({ credentials: 'same-origin', cache: 'no-store' }, opts));
+    if (r.status === 401) { signedOut(); throw new Error('Signed out'); }
+    if (!r.ok) { let m = r.statusText; try { m = (await r.json()).error || m; } catch (e) {} throw new Error(m); }
+    return r;
+  }
+  function signedOut() {
+    stateReady = false;
+    $('browse').hidden = false; $('browse').classList.add('out');
+    $('bList').innerHTML = '<div class="bmsg"><b>Signed out</b>Go Home and sign in with your PIN to see PARTS.</div>';
+  }
+  function saveState() {
+    if (!stateReady) return;
+    clearTimeout(saveT);
+    saveT = setTimeout(() => {
+      const open = files.filter(f => f.src), c = files[cur] && files[cur].src ? open.indexOf(files[cur]) : -1;
+      api('/api/files/state', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dir: bDir, open: open.map(f => f.src), cur: c }) }).catch(() => {});
+    }, 400);
+  }
+  // paths under PARTS -> side list (already open ones just get picked); shows paths[pick]
+  function addRemote(paths, pick = 0) {
+    const fresh = [], at = [];
+    for (const p of paths) {
+      const name = p.split('/').pop(), kd = kindOf(name);
+      if (!kd) continue;
+      let i = files.findIndex(x => x.src === p);
+      if (i >= 0 && !files[i].err) { at.push(i); continue; }
+      const e = { name, size: 0, file: null, kind: kd.k, dim: kd.dim, tag: kd.tag, model: null, m3: null, err: null, loading: true, handleP: null, src: p,
+        fileP: api('/api/files/raw?path=' + enc(p)).then(r => r.blob()).then(b => new File([b], name)) };
+      e.fileP.catch(() => {});   // read (and its error shown) in turn by loadAll
+      if (i >= 0) { drop(files[i]); files[i] = e; } else { files.push(e); i = files.length - 1; }
+      at.push(i); fresh.push(e);
+    }
+    if (!at.length) return;
+    select(at[Math.min(pick, at.length - 1)]);
+    return loadAll(fresh);
+  }
+  const kb = (n) => n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB';
+  async function browse(dir) {
+    const box = $('browse');
+    box.hidden = false; box.classList.remove('out');
+    $('bFilter').value = '';
+    $('bList').innerHTML = '<div class="muted">Loading…</div>';
+    try { bData = await (await api('/api/files/list?path=' + enc(dir))).json(); }
+    catch (err) {
+      if (err.message === 'Signed out') return;
+      if (dir) return browse(dir.split('/').slice(0, -1).join('/'));   // moved or renamed since: try the folder above
+      $('bList').innerHTML = ''; const m = document.createElement('div'); m.className = 'bmsg'; m.textContent = 'Could not read PARTS: ' + err.message; $('bList').appendChild(m);
+      return;
+    }
+    bDir = bData.path; bRoot = bData.root || bRoot; saveState();
+    // crumbs: PARTS › Customer › Part › Rev
+    const cr = $('bCrumbs'); cr.innerHTML = '';
+    const segs = bDir ? bDir.split('/') : [];
+    [bRoot, ...segs].forEach((s, i) => {
+      if (i) cr.appendChild(document.createTextNode(' › '));
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'crumb'; b.textContent = s;
+      b.onclick = () => browse(segs.slice(0, i).join('/'));
+      cr.appendChild(b);
+    });
+    cr.scrollLeft = cr.scrollWidth;
+    $('bUp').disabled = !bDir;
+    markQuick();
+    renderBrowse();
+    if (matchMedia('(pointer: fine)').matches) $('bFilter').focus();
+  }
+  function renderBrowse() {
+    if (!bData) return;
+    const q = $('bFilter').value.trim().toLowerCase(), hit = (n) => !q || n.toLowerCase().includes(q);
+    const join = (n) => (bDir ? bDir + '/' : '') + n;
+    const list = $('bList'); list.innerHTML = '';
+    const dirs = bData.dirs.filter(d => hit(d.name)), fl = bData.files.filter(f => hit(f.name));
+    const viewable = fl.filter(f => kindOf(f.name));
+    $('bAll').style.display = viewable.length > 1 ? '' : 'none';
+    $('bAll').textContent = 'Open all ' + viewable.length;
+    $('bAll').onclick = () => { closeBrowse(); addRemote(viewable.map(f => join(f.name))); };
+    for (const d of dirs) {
+      const r = document.createElement('button'); r.type = 'button'; r.className = 'brow dir';
+      r.innerHTML = '<span class="ic"></span><span class="bn"></span>';
+      r.querySelector('.bn').textContent = d.name;
+      r.onclick = () => browse(join(d.name));
+      list.appendChild(r);
+    }
+    for (const f of fl) {
+      const kd = kindOf(f.name), p = join(f.name), open = files.some(x => x.src === p);
+      const r = document.createElement('button'); r.type = 'button'; r.className = 'brow file' + (kd ? '' : ' no') + (open ? ' open' : '');
+      r.innerHTML = '<span class="kind"></span><span class="bn"></span><span class="bs"></span>';
+      const k = r.querySelector('.kind'); k.textContent = kd ? kd.tag : (f.name.split('.').pop() || '').slice(0, 4).toUpperCase(); if (kd) k.classList.add('k' + kd.dim + 'd');
+      r.querySelector('.bn').textContent = f.name;
+      r.querySelector('.bs').textContent = kb(f.size) + ' · ' + new Date(f.mtime).toLocaleDateString();
+      if (kd) r.onclick = () => { closeBrowse(); addRemote([p]); }; else r.disabled = true;
+      list.appendChild(r);
+    }
+    if (!dirs.length && !fl.length) list.innerHTML = '<div class="muted">' + (q ? 'Nothing here matches.' : 'This folder is empty.') + '</div>';
+  }
+  // quick access: Badger Shop picks the top 5 customers by the last 3 months of sales (Fulcrum) that have a PARTS folder
+  async function loadQuick() {
+    let list = [];
+    try { list = (await (await api('/api/files/top-customers')).json()).customers || []; } catch (e) {}
+    const box = $('bQuick'); box.innerHTML = '';
+    for (const c of list) {
+      const b = document.createElement('button'); b.type = 'button'; b.textContent = c.name; b.dataset.path = c.path;
+      b.onclick = () => browse(c.path);
+      box.appendChild(b);
+    }
+    box.hidden = !list.length;
+    markQuick();
+  }
+  function markQuick() {   // light up the customer whose folder is open
+    for (const b of $('bQuick').children) b.classList.toggle('on', bDir === b.dataset.path || bDir.startsWith(b.dataset.path + '/'));
+  }
+  function closeBrowse() { if (!$('browse').classList.contains('out')) $('browse').hidden = true; }
+  $('bFilter').oninput = renderBrowse;
+  $('bFilter').onkeydown = (e) => { if (e.key === 'Enter') { const b = $('bList').querySelector('.brow:not([disabled])'); if (b) b.click(); } };
+  $('bUp').onclick = () => browse(bDir.split('/').slice(0, -1).join('/'));
+  $('bClose').onclick = closeBrowse;
+  $('browse').addEventListener('click', (e) => { if (e.target === $('browse')) closeBrowse(); });
+  $('browse').addEventListener('keydown', (e) => {   // typing in the filter is not a viewer shortcut
+    if (e.key === 'Escape') closeBrowse();
+    else if (e.key === 'Backspace' && e.target !== $('bFilter') && bDir) $('bUp').click();
+    e.stopPropagation();
+  });
+  if (PI) {
+    $('openBtn').title = 'Find files in PARTS';
+    renderQueue();
+    (async () => {
+      let st;
+      try { st = await (await api('/api/files/state')).json(); }
+      catch (err) { if (err.message !== 'Signed out') { $('browse').hidden = false; $('bList').textContent = 'Could not reach PARTS: ' + err.message; } return; }
+      bRoot = st.root || bRoot; bDir = st.dir || ''; stateReady = true;
+      loadQuick();
+      if (st.open && st.open.length) addRemote(st.open, Math.max(0, st.cur)); else browse(bDir);
+    })();
+  }
 
   // dimension size: ▲ / ▼ step 10%, the slider drags, double-click the % for 100%
   function setDimK(v) {
